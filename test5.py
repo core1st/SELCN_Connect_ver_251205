@@ -20,7 +20,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.title("연결 스케줄 확인 앱 VER.2.6 (Complete Integrated)")
+st.title("연결 스케줄 분석 앱 VER.1.6")
 
 # --- 모드 선택 ---
 analysis_mode = st.radio(
