@@ -579,7 +579,7 @@ elif analysis_mode == "두 스케줄 비교 분석":
                 
                 with t1:
                     st.info(f"**분석 기준**: [{g_name_a}] ↔ [{g_name_b}]")
-                    st.markdown("### 총 스케줄 가치 비교 (Scoring)")
+                    st.markdown("### 연결 스코어 비교 (Scoring)")
                     sc_col1, sc_col2, sc_col3 = st.columns(3)
                     with sc_col1: st.metric("스케줄 1 총점", f"{conn_cmp['stats']['total_score_1']:,.0f}점")
                     with sc_col2: st.metric("스케줄 2 총점", f"{conn_cmp['stats']['total_score_2']:,.0f}점")
