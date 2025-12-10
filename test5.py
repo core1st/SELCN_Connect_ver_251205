@@ -466,19 +466,43 @@ if analysis_mode == "단일 스케줄 분석":
                             connected_data = result_df[result_df['Status']=='Connected']
                             
                             c1, c2 = st.columns(2)
+                            
+                            # [Left Chart] Selected Airport(출발) -> ICN -> Destination
                             with c1:
                                 out_df = connected_data[(connected_data['Direction'] == 'Group A -> Group B') & (connected_data['From'] == selected_airport)]
                                 if not out_df.empty:
                                     chart = alt.Chart(out_df).mark_circle(size=100).encode(
-                                        x='To', y='Conn_Min', color='Inbound_Flt_No', tooltip=['To', 'Conn_Min', 'Inbound_Flt_No']
+                                        x='To', 
+                                        y='Conn_Min', 
+                                        color='Inbound_Flt_No', 
+                                        tooltip=[
+                                            'To', 
+                                            'Conn_Min', 
+                                            'Inbound_Flt_No', 
+                                            'Outbound_Flt_No',  # 추가됨
+                                            'Hub_Arr_Time',     # 추가됨 (ICN 도착 시간)
+                                            'Hub_Dep_Time'      # 추가됨 (ICN 출발 시간)
+                                        ]
                                     ).properties(height=300, title=f"{selected_airport} 도착 -> ICN 연결").interactive()
                                     st.altair_chart(chart, use_container_width=True)
                                 else: st.info("데이터 없음")
+
+                            # [Right Chart] Origin -> ICN -> Selected Airport(도착)
                             with c2:
                                 in_df = connected_data[(connected_data['Direction'] == 'Group B -> Group A') & (connected_data['To'] == selected_airport)]
                                 if not in_df.empty:
                                     chart = alt.Chart(in_df).mark_circle(size=100).encode(
-                                        x='From', y='Conn_Min', color='Outbound_Flt_No', tooltip=['From', 'Conn_Min', 'Outbound_Flt_No']
+                                        x='From', 
+                                        y='Conn_Min', 
+                                        color='Outbound_Flt_No', 
+                                        tooltip=[
+                                            'From', 
+                                            'Conn_Min', 
+                                            'Outbound_Flt_No', 
+                                            'Inbound_Flt_No',   # 추가됨
+                                            'Hub_Arr_Time',     # 추가됨 (ICN 도착 시간)
+                                            'Hub_Dep_Time'      # 추가됨 (ICN 출발 시간)
+                                        ]
                                     ).properties(height=300, title=f"ICN 출발 -> {selected_airport} 도착").interactive()
                                     st.altair_chart(chart, use_container_width=True)
                                 else: st.info("데이터 없음")
