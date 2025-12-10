@@ -483,7 +483,7 @@ if analysis_mode == "단일 스케줄 분석":
                                             'Hub_Arr_Time',     # 추가됨 (ICN 도착 시간)
                                             'Hub_Dep_Time'      # 추가됨 (ICN 출발 시간)
                                         ]
-                                    ).properties(height=300, title=f"{selected_airport} 도착 -> ICN 연결").interactive()
+                                    ).properties(height=500, title=f"{selected_airport} 도착 -> ICN 연결").interactive()
                                     st.altair_chart(chart, use_container_width=True)
                                 else: st.info("데이터 없음")
 
@@ -503,7 +503,7 @@ if analysis_mode == "단일 스케줄 분석":
                                             'Hub_Arr_Time',     # 추가됨 (ICN 도착 시간)
                                             'Hub_Dep_Time'      # 추가됨 (ICN 출발 시간)
                                         ]
-                                    ).properties(height=300, title=f"ICN 출발 -> {selected_airport} 도착").interactive()
+                                    ).properties(height=500, title=f"ICN 출발 -> {selected_airport} 도착").interactive()
                                     st.altair_chart(chart, use_container_width=True)
                                 else: st.info("데이터 없음")
 
@@ -638,4 +638,5 @@ elif analysis_mode == "두 스케줄 비교 분석":
         except Exception as e:
             st.error(f"오류가 발생했습니다: {e}")
             import traceback
+
             st.text(traceback.format_exc())
