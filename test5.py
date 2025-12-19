@@ -20,7 +20,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.title("연결 스케줄 분석 앱 VER.1.6")
+st.title("연결 스케줄 분석 앱 VER.1.8 (Editor)")
 
 # --- 모드 선택 ---
 analysis_mode = st.radio(
@@ -69,7 +69,7 @@ def load_data(file):
             return df
         except:
             continue
-    raise ValueError("파일을 읽을 수 없습니다. 인코딩 문제이거나 필수 컬럼이 누락되었습니다.")
+    return None # 실패 시 None 반환
 
 def time_to_minutes(t_str):
     try:
@@ -230,7 +230,7 @@ def compare_schedules(df1, df2, min_limit, max_limit,
                       group_a_routes, group_a_ops, 
                       group_b_routes, group_b_ops,
                       score_weights, time_thresholds):
-    """두 스케줄의 연결 분석 결과를 비교 (복구됨)"""
+    """두 스케줄의 연결 분석 결과를 비교"""
     
     # 각 스케줄 분석 실행
     raw_result1 = analyze_connections_flexible(df1, min_limit, max_limit, group_a_routes, group_a_ops, group_b_routes, group_b_ops)
@@ -316,7 +316,7 @@ def compare_schedules(df1, df2, min_limit, max_limit,
 
 
 def compare_flights(df1, df2):
-    """두 스케줄의 항공편 자체를 비교 (복구됨)"""
+    """두 스케줄의 항공편 자체를 비교"""
     def create_flight_key(row):
         return f"{row['OPS']}{row['FLT NO']}_{row['ORGN']}_{row['DEST']}"
     
@@ -359,26 +359,49 @@ def compare_flights(df1, df2):
 # 4. 메인 실행 로직: [단일 분석 모드]
 # ==============================================================================
 if analysis_mode == "단일 스케줄 분석":
-    st.sidebar.header("⚙️ 분석 설정")
-    uploaded_file = st.sidebar.file_uploader("📂 데이터 파일 (CSV)", type="csv")
+    st.sidebar.header(" 분석 설정")
+    uploaded_file = st.sidebar.file_uploader(" 데이터 파일 (CSV)", type="csv")
 
     if uploaded_file is not None:
-        try:
-            df = load_data(uploaded_file)
-            st.sidebar.success(f"✅ 파일 로드: {len(df)}건")
+        # 1. 파일이 새로 업로드되었을 때만 로드하여 Session State에 저장
+        if 'last_uploaded_single' not in st.session_state or st.session_state['last_uploaded_single'] != uploaded_file.name:
+            loaded_df = load_data(uploaded_file)
+            if loaded_df is not None:
+                st.session_state['single_raw_df'] = loaded_df
+                st.session_state['last_uploaded_single'] = uploaded_file.name
+                # 분석 결과 초기화
+                if 'analysis_done' in st.session_state: del st.session_state['analysis_done']
+            else:
+                st.error("파일을 읽을 수 없습니다.")
+
+        # 2. 데이터 에디터 표시 및 수정된 데이터 획득
+        if 'single_raw_df' in st.session_state:
+            st.markdown("###  데이터 편집 (Data Editor)")
+            st.caption("아래 표에서 데이터를 직접 추가/수정/삭제할 수 있습니다. 수정한 데이터로 분석이 진행됩니다.")
             
+            # 에디터 설정
+            edited_df = st.data_editor(
+                st.session_state['single_raw_df'],
+                num_rows="dynamic",  # 행 추가/삭제 가능
+                use_container_width=True,
+                key="single_editor"
+            )
+            
+            # 여기서부터는 edited_df를 사용합니다.
+            df = edited_df
+
             all_routes = sorted(df['ROUTE'].unique().tolist())
             all_ops = sorted(df['OPS'].unique().tolist())
             
             st.sidebar.markdown("---")
-            st.sidebar.subheader("📌 노선 그룹 매칭")
+            st.sidebar.subheader(" 노선 그룹 매칭")
             
             default_route_a = [all_routes[0]] if all_routes else None
             if "미주노선" in all_routes: default_route_a = ["미주노선"]
             routes_a = st.sidebar.multiselect("그룹 A 노선 선택", all_routes, default=default_route_a, key='ra')
             ops_a = st.sidebar.multiselect("그룹 A 항공사 선택", all_ops, default=all_ops, key='oa')
             
-            st.sidebar.markdown("⬇️ ⬆️")
+            st.sidebar.markdown(" ") # 이모지 제거
             
             default_route_b = [all_routes[1]] if len(all_routes) > 1 else all_routes
             if "동남아노선" in all_routes and "미주노선" in all_routes: default_route_b = ["동남아노선"]
@@ -391,11 +414,12 @@ if analysis_mode == "단일 스케줄 분석":
             
             score_weights, time_thresholds, display_info = render_score_settings("single", min_mct, max_ct)
             
-            if st.button("🚀 분석 시작", type="primary"):
+            if st.button(" 분석 시작", type="primary"):
                 if not routes_a or not routes_b:
                     st.error("그룹 노선을 선택해주세요.")
                 else:
                     with st.spinner("분석 중..."):
+                        # df는 위에서 정의한 edited_df 입니다.
                         raw_df = analyze_connections_flexible(df, min_mct, max_ct, routes_a, ops_a, routes_b, ops_b)
                         result_df = apply_scoring(raw_df, min_mct, max_ct, score_weights, time_thresholds)
                         
@@ -403,18 +427,19 @@ if analysis_mode == "단일 스케줄 분석":
                         st.session_state['analysis_done'] = True
                         st.session_state['group_names'] = (", ".join(routes_a), ", ".join(routes_b))
                         st.session_state['score_info'] = display_info 
-                        st.session_state['source_df'] = df 
+                        st.session_state['source_df'] = df  # 분석에 사용된 데이터 저장
 
             if 'analysis_done' in st.session_state and st.session_state['analysis_done']:
                 result_df = st.session_state['analysis_result']
                 source_df = st.session_state.get('source_df', df) 
                 g_name_a, g_name_b = st.session_state.get('group_names', ("A", "B"))
                 
-                # 탭 4개 (허브 모니터링 포함)
-                tab1, tab2, tab3, tab4 = st.tabs(["📊 결과 요약", "📋 상세 리스트", "✈️ 공항별 심층 분석", "🕒 허브 스케줄 모니터링"])
+                st.divider()
+                # 탭 5개로 확장
+                tab1, tab2, tab3, tab4, tab5 = st.tabs([" 결과 요약", " 상세 리스트", " 공항별 심층 분석", " 허브 스케줄 모니터링", " Bank 구조 시각화"])
                 
                 with tab1:
-                    st.info(f" **분석 기준**: [{g_name_a}] ↔ [{g_name_b}]")
+                    st.info(f" **분석 기준**: [{g_name_a}] <-> [{g_name_b}]")
                     if result_df.empty:
                         st.warning("조건에 맞는 연결편이 없습니다.")
                     else:
@@ -429,7 +454,7 @@ if analysis_mode == "단일 스케줄 분석":
                         m3.metric("평균 연결 품질", f"{avg_score:.1f}점 / 10점")
                         
                         st.markdown("---")
-                        st.markdown("#### 1️⃣ 노선/항공사별 통합 연결 상세")
+                        st.markdown("#### 1 노선/항공사별 통합 연결 상세")
                         combined_summary = result_df.groupby(['Inbound_Route', 'Inbound_OPS', 'Outbound_Route', 'Outbound_OPS', 'Status']).size().unstack(fill_value=0)
                         if 'Connected' not in combined_summary.columns: combined_summary['Connected'] = 0
                         combined_summary['Total'] = combined_summary.sum(axis=1)
@@ -445,13 +470,13 @@ if analysis_mode == "단일 스케줄 분석":
                         view_df = result_df[result_df['Status'].isin(status_filter)].sort_values(['Direction', 'Conn_Min'])
                         st.dataframe(view_df, use_container_width=True, hide_index=True)
                         csv = view_df.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button("💾 CSV 다운로드", csv, "connection_analysis.csv", "text/csv")
+                        st.download_button(" CSV 다운로드", csv, "connection_analysis.csv", "text/csv")
 
                 with tab3:
                     if result_df.empty:
                          st.warning("데이터가 없습니다.")
                     else:
-                        st.markdown("### 🏙️ 공항 기준 연결성 분석")
+                        st.markdown("###  공항 기준 연결성 분석")
                         src_a = result_df[result_df['Direction'] == 'Group A -> Group B']['From'].unique()
                         dst_a = result_df[result_df['Direction'] == 'Group B -> Group A']['To'].unique()
                         candidates = set(src_a) | set(dst_a)
@@ -462,110 +487,208 @@ if analysis_mode == "단일 스케줄 분석":
                             st.info("차트를 그릴 수 있는 공항 데이터가 없습니다.")
                         else:
                             st.markdown(f"**그룹 A ({g_name_a}) 소속 공항 선택**")
-                            selected_airport = st.selectbox("📍 공항 선택", airport_list)
+                            selected_airport = st.selectbox(" 공항 선택", airport_list)
                             connected_data = result_df[result_df['Status']=='Connected']
                             
                             c1, c2 = st.columns(2)
                             
-                            # [Left Chart] Selected Airport(출발) -> ICN -> Destination
                             with c1:
                                 out_df = connected_data[(connected_data['Direction'] == 'Group A -> Group B') & (connected_data['From'] == selected_airport)]
                                 if not out_df.empty:
-                                    chart = alt.Chart(out_df).mark_circle(size=100).encode(
-                                        x='To', 
-                                        y='Conn_Min', 
-                                        color='Inbound_Flt_No', 
-                                        tooltip=[
-                                            'To', 
-                                            'Conn_Min', 
-                                            'Inbound_Flt_No', 
-                                            'Outbound_Flt_No',  # 추가됨
-                                            'Hub_Arr_Time',     # 추가됨 (ICN 도착 시간)
-                                            'Hub_Dep_Time'      # 추가됨 (ICN 출발 시간)
-                                        ]
+                                    chart = alt.Chart(out_df).mark_circle(size=150).encode(
+                                        x='To', y='Conn_Min', color='Inbound_Flt_No', 
+                                        tooltip=['To', 'Conn_Min', 'Inbound_Flt_No', 'Outbound_Flt_No', 'Hub_Arr_Time', 'Hub_Dep_Time']
                                     ).properties(height=500, title=f"{selected_airport} 도착 -> ICN 연결").interactive()
                                     st.altair_chart(chart, use_container_width=True)
                                 else: st.info("데이터 없음")
 
-                            # [Right Chart] Origin -> ICN -> Selected Airport(도착)
                             with c2:
                                 in_df = connected_data[(connected_data['Direction'] == 'Group B -> Group A') & (connected_data['To'] == selected_airport)]
                                 if not in_df.empty:
-                                    chart = alt.Chart(in_df).mark_circle(size=100).encode(
-                                        x='From', 
-                                        y='Conn_Min', 
-                                        color='Outbound_Flt_No', 
-                                        tooltip=[
-                                            'From', 
-                                            'Conn_Min', 
-                                            'Outbound_Flt_No', 
-                                            'Inbound_Flt_No',   # 추가됨
-                                            'Hub_Arr_Time',     # 추가됨 (ICN 도착 시간)
-                                            'Hub_Dep_Time'      # 추가됨 (ICN 출발 시간)
-                                        ]
+                                    chart = alt.Chart(in_df).mark_circle(size=150).encode(
+                                        x='From', y='Conn_Min', color='Outbound_Flt_No', 
+                                        tooltip=['From', 'Conn_Min', 'Outbound_Flt_No', 'Inbound_Flt_No', 'Hub_Arr_Time', 'Hub_Dep_Time']
                                     ).properties(height=500, title=f"ICN 출발 -> {selected_airport} 도착").interactive()
                                     st.altair_chart(chart, use_container_width=True)
                                 else: st.info("데이터 없음")
 
-                # [NEW] Tab 4: Hub Schedule Monitor
                 with tab4:
-                    st.markdown("### 🕒 ICN 허브 스케줄 모니터링")
+                    st.markdown("###  ICN 허브 스케줄 모니터링")
                     st.caption("도착/출발 항공편을 1시간 단위로 분류하여 노선별 색상 코드로 시각화합니다.")
-                    
-                    # 1. 데이터 분리 (도착/출발) 및 시간대 생성
                     arr_raw = source_df[source_df['구분'] == 'To ICN'].copy()
                     dep_raw = source_df[source_df['구분'] == 'From ICN'].copy()
-                    
                     arr_raw['시간대'] = arr_raw['STA'].apply(get_time_slot)
                     dep_raw['시간대'] = dep_raw['STD'].apply(get_time_slot)
-                    
-                    # 2. 정렬 (시간순 - 분 단위 변환 값을 기준으로 오름차순 정렬)
-                    # 'Sort_Key'라는 임시 컬럼을 만들어 분(min) 단위 숫자로 변환
                     arr_raw['Sort_Key'] = arr_raw['STA'].apply(time_to_minutes)
                     dep_raw['Sort_Key'] = dep_raw['STD'].apply(time_to_minutes)
-
-                    # 변환된 숫자를 기준으로 정렬 (오름차순)
                     arr_raw = arr_raw.sort_values(by='Sort_Key', ascending=True)
                     dep_raw = dep_raw.sort_values(by='Sort_Key', ascending=True)
-                    
-                    # 3. 보여줄 컬럼 선택
                     cols_arr = ['시간대', 'STA', 'ROUTE', 'ORGN', 'OPS', 'FLT NO']
                     cols_dep = ['시간대', 'STD', 'ROUTE', 'DEST', 'OPS', 'FLT NO']
-                    
-                    # 4. 스타일 적용
                     styled_arr = arr_raw[cols_arr].style.map(color_route_style, subset=['ROUTE'])
                     styled_dep = dep_raw[cols_dep].style.map(color_route_style, subset=['ROUTE'])
-                    
-                    # 5. 화면 표시 (2단 컬럼)
                     col_arr, col_dep = st.columns(2)
-                    
                     with col_arr:
-                        st.subheader("🛬 ICN 도착 (Arrival)")
+                        st.subheader(" ICN 도착 (Arrival)")
                         st.dataframe(styled_arr, use_container_width=True, height=800, hide_index=True)
-                        
                     with col_dep:
-                        st.subheader("🛫 ICN 출발 (Departure)")
+                        st.subheader(" ICN 출발 (Departure)")
                         st.dataframe(styled_dep, use_container_width=True, height=800, hide_index=True)
 
-        except Exception as e:
-            st.error(f"오류가 발생했습니다: {e}")
-            import traceback
-            st.text(traceback.format_exc())
-    else:
-        if 'analysis_done' in st.session_state:
-            del st.session_state['analysis_done']
-        st.info("파일을 업로드하고 분석을 시작하세요.")
+                with tab5:
+                    # [Style] Inbound 버튼 텍스트 BOLD 및 사이즈업 처리
+                    st.markdown("""
+                    <style>
+                    div.stButton > button {
+                        font-weight: bold !important;
+                        font-size: 16px !important;
+                        border: 1px solid #ddd;
+                    }
+                    div.stButton > button p {
+                        font-weight: bold !important;
+                        font-size: 16px !important;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown("###  Connection Bank (Interactive)")
+                    st.caption("왼쪽(Inbound) 블록을 **클릭**하면 연결 가능한 오른쪽(Outbound) 편이 강조됩니다. (Group A -> Group B 기준)")
+
+                    # 0. 세션 스테이트 초기화 (선택된 Inbound 항공편 저장용)
+                    if 'selected_inbound_flt' not in st.session_state:
+                        st.session_state['selected_inbound_flt'] = None
+
+                    # 1. 데이터 필터링
+                    target_df = result_df[
+                        (result_df['Status'] == 'Connected') &
+                        (result_df['Direction'] == 'Group A -> Group B')
+                    ].copy()
+
+                    if target_df.empty:
+                        st.warning("설정된 조건(Group A -> Group B)에 맞는 연결 데이터가 없습니다.")
+                    else:
+                        # 2. Inbound / Outbound 데이터프레임 분리 및 전처리
+                        in_cols = ['Inbound_Flt_No', 'Inbound_OPS', 'Inbound_Route', 'From', 'Hub_Arr_Time']
+                        df_in = target_df[in_cols].drop_duplicates()
+                        df_in.columns = ['FLT', 'OPS', 'ROUTE', 'PORT', 'TIME']
+                        df_in['Time_Min'] = df_in['TIME'].apply(time_to_minutes)
+                        df_in['Hour'] = (df_in['Time_Min'] // 60) % 24 
+                        
+                        out_cols = ['Outbound_Flt_No', 'Outbound_OPS', 'Outbound_Route', 'To', 'Hub_Dep_Time']
+                        df_out = target_df[out_cols].drop_duplicates()
+                        df_out.columns = ['FLT', 'OPS', 'ROUTE', 'PORT', 'TIME']
+                        df_out['Time_Min'] = df_out['TIME'].apply(time_to_minutes)
+                        df_out['Hour'] = (df_out['Time_Min'] // 60) % 24
+
+                        # 정렬 (시간 -> 노선명)
+                        df_in = df_in.sort_values(by=['Time_Min', 'ROUTE'])
+                        df_out = df_out.sort_values(by=['Time_Min', 'ROUTE'])
+
+                        # 스타일 정의
+                        def get_route_color_hex(route_val):
+                            val_upper = str(route_val).upper()
+                            if any(x in val_upper for x in ['CHN', '중국']): return '#d9534f'
+                            elif any(x in val_upper for x in ['SEA', '동남아']): return '#f0ad4e'
+                            elif any(x in val_upper for x in ['JPN', '일본']): return '#5bc0de'
+                            elif any(x in val_upper for x in ['AME', '미주']): return '#0275d8'
+                            elif any(x in val_upper for x in ['EUR', '구주', '유럽']): return '#5cb85c'
+                            return '#777777'
+
+                        def create_outbound_card(row, is_highlighted, is_dimmed):
+                            bg_color = get_route_color_hex(row['ROUTE'])
+                            opacity = "0.2" if is_dimmed else "1.0"
+                            box_shadow = "0px 0px 8px 2px #FFD700" if is_highlighted else "1px 1px 3px rgba(0,0,0,0.1)"
+                            border_style = f"4px solid {bg_color}"
+                            
+                            html = f"""
+                            <div style="
+                                opacity: {opacity};
+                                background-color: white;
+                                border-left: {border_style};
+                                border-radius: 4px;
+                                margin-bottom: 8px;
+                                padding: 10px;
+                                box-shadow: {box_shadow};
+                                transition: all 0.3s ease;
+                            ">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-weight:bold; color:#333; font-size:1.1em;">{row['TIME']}</span>
+                                    <span style="background-color:{bg_color}; color:white; padding:2px 6px; border-radius:3px; font-size:0.7em;">{row['ROUTE']}</span>
+                                </div>
+                                <div style="margin-top:4px; display:flex; justify-content:space-between; color:#555;">
+                                    <span>{row['FLT']}</span>
+                                    <span style="font-weight:bold;">{row['PORT']}</span>
+                                </div>
+                            </div>
+                            """
+                            return html
+
+                        st.markdown("---")
+                        h1, h2 = st.columns(2)
+                        h1.markdown(f"<h4 style='text-align:center; color:#6A5ACD;'> Inbound ({g_name_a})</h4>", unsafe_allow_html=True)
+                        h2.markdown(f"<h4 style='text-align:center; color:#00BCD4;'> Outbound ({g_name_b})</h4>", unsafe_allow_html=True)
+
+                        connected_outbounds = []
+                        if st.session_state['selected_inbound_flt']:
+                            connected_outbounds = target_df[
+                                target_df['Inbound_Flt_No'] == st.session_state['selected_inbound_flt']
+                            ]['Outbound_Flt_No'].tolist()
+
+                        for hour in range(24):
+                            in_group = df_in[df_in['Hour'] == hour]
+                            out_group = df_out[df_out['Hour'] == hour]
+
+                            if not in_group.empty or not out_group.empty:
+                                st.markdown(
+                                    f"<div style='background:#f0f2f6; padding:5px; margin:10px 0; font-weight:bold; text-align:center; border-radius:5px;'>"
+                                    f"{hour:02d}:00 - {hour+1:02d}:00</div>", 
+                                    unsafe_allow_html=True
+                                )
+                                c_left, c_right = st.columns(2)
+                                
+                                with c_left:
+                                    for _, row in in_group.iterrows():
+                                        flt_no = row['FLT']
+                                        btn_label = f"[{row['TIME']}] {flt_no} ({row['PORT']})"
+                                        is_selected = (st.session_state['selected_inbound_flt'] == flt_no)
+                                        type_icon = "" # 이모지 제거
+                                        
+                                        if st.button(f"{type_icon} {btn_label}", key=f"btn_{flt_no}", use_container_width=True):
+                                            st.session_state['selected_inbound_flt'] = flt_no
+                                            st.rerun()
+
+                                with c_right:
+                                    for _, row in out_group.iterrows():
+                                        flt_out = row['FLT']
+                                        is_highlighted = False
+                                        is_dimmed = False
+                                        if st.session_state['selected_inbound_flt']:
+                                            if flt_out in connected_outbounds: is_highlighted = True
+                                            else: is_dimmed = True 
+                                        st.markdown(create_outbound_card(row, is_highlighted, is_dimmed), unsafe_allow_html=True)
+                        
+                        if st.session_state['selected_inbound_flt']:
+                            if st.button(" 선택 초기화 (모두 보기)", type="primary"):
+                                st.session_state['selected_inbound_flt'] = None
+                                st.rerun()
+
+        else:
+            if 'analysis_done' in st.session_state:
+                del st.session_state['analysis_done']
+            st.info("파일을 업로드하고 분석을 시작하세요.")
 
 # ==============================================================================
-# 5. 메인 실행 로직: [두 스케줄 비교 분석 모드] (완벽 복구)
+# 5. 메인 실행 로직: [두 스케줄 비교 분석 모드]
 # ==============================================================================
 elif analysis_mode == "두 스케줄 비교 분석":
-    st.sidebar.header("⚙️ 비교 분석 설정")
-    file1 = st.sidebar.file_uploader("📂 스케줄 1 (Before)", type="csv", key="file1")
-    file2 = st.sidebar.file_uploader("📂 스케줄 2 (After)", type="csv", key="file2")
+    st.sidebar.header(" 비교 분석 설정")
+    file1 = st.sidebar.file_uploader(" 스케줄 1 (Before)", type="csv", key="file1")
+    file2 = st.sidebar.file_uploader(" 스케줄 2 (After)", type="csv", key="file2")
     
     if file1 and file2:
         try:
+            # 비교 모드에서도 에디터를 쓰고 싶다면 여기에 로직을 추가할 수 있습니다.
+            # 현재는 파일 업로드 -> 바로 분석 로직을 유지하되, 데이터 로드 함수만 사용합니다.
             df1 = load_data(file1)
             df2 = load_data(file2)
             
@@ -582,7 +705,7 @@ elif analysis_mode == "두 스케줄 비교 분석":
             max_ct = st.sidebar.number_input("Max CT", 60, 2880, 300, 60, key='cmp_max')
             score_weights_cmp, time_thresholds_cmp, _ = render_score_settings("cmp", min_mct, max_ct)
             
-            if st.button("🔍 비교 분석 시작", type="primary"):
+            if st.button(" 비교 분석 시작", type="primary"):
                  if routes_a and routes_b:
                     with st.spinner("비교 분석 중..."):
                         conn_cmp = compare_schedules(df1, df2, min_mct, max_ct, routes_a, ops_a, routes_b, ops_b, score_weights_cmp, time_thresholds_cmp)
@@ -599,10 +722,10 @@ elif analysis_mode == "두 스케줄 비교 분석":
                 flt_cmp = st.session_state['flight_comparison']
                 g_name_a, g_name_b = st.session_state.get('cmp_group_names', ("A", "B"))
                 
-                t1, t2, t3, t4 = st.tabs(["📊 비교 요약", "✈️ 항공편 변경", "🔗 연결 변경", "⏱️ 시간/스코어 변경"])
+                t1, t2, t3, t4 = st.tabs([" 비교 요약", " 항공편 변경", " 연결 변경", " 시간/스코어 변경"])
                 
                 with t1:
-                    st.info(f"**분석 기준**: [{g_name_a}] ↔ [{g_name_b}]")
+                    st.info(f"**분석 기준**: [{g_name_a}] <-> [{g_name_b}]")
                     st.markdown("### 연결 스코어 비교 (Scoring)")
                     sc_col1, sc_col2, sc_col3 = st.columns(3)
                     with sc_col1: st.metric("스케줄 1 총점", f"{conn_cmp['stats']['total_score_1']:,.0f}점")
@@ -614,10 +737,10 @@ elif analysis_mode == "두 스케줄 비교 분석":
                     st.markdown("---")
                     c1, c2 = st.columns(2)
                     with c1:
-                        st.markdown("#### ✈️ 항공편 변경")
+                        st.markdown("####  항공편 변경")
                         st.metric("총 항공편 차이", flt_cmp['stats']['total_2'] - flt_cmp['stats']['total_1'])
                     with c2:
-                        st.markdown("#### 🔗 연결 변경")
+                        st.markdown("####  연결 변경")
                         st.metric("총 연결 편수 차이", conn_cmp['stats']['total_conn_2'] - conn_cmp['stats']['total_conn_1'])
 
                 with t2:
@@ -638,5 +761,4 @@ elif analysis_mode == "두 스케줄 비교 분석":
         except Exception as e:
             st.error(f"오류가 발생했습니다: {e}")
             import traceback
-
             st.text(traceback.format_exc())
