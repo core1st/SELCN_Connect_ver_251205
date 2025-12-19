@@ -9,6 +9,14 @@ from datetime import datetime
 # ==============================================================================
 st.set_page_config(page_title="여객노선부 연결 분석기", layout="wide")
 
+hide_menu_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        </style>
+        """
+st.markdown(hide_menu_style, unsafe_allow_html=True)
+
 st.markdown(
     """
     <style>
