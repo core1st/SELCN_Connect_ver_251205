@@ -352,13 +352,13 @@ def preprocess_export_data(file, target_date):
 # [MODE 1] 스케줄 데이터 변환기
 if analysis_mode == "스케줄 데이터 변환":
     st.header("Raw 스케줄 데이터 변환")
-    st.info("`BASE의 WEEKLY SKD 메뉴를 이용 추출한 export.csv` 데이터를 업로드하고 해당 날짜를 선택하면 분석 가능한 형식으로 자동 변환합니다.")
+    st.info("BASE의 WEEKLY SKD 메뉴를 통해 추출한 export.csv 파일을 업로드하고 분석할 날짜를 선택하면 분석가능한 형식으로 변환합니다 ")
     
     col1, col2 = st.columns(2)
     with col1:
         raw_file = st.file_uploader("원본 파일 업로드 (export.csv)", type="csv")
     with col2:
-        target_date = st.date_input("분석할 운항 일자 선택", datetime.today())
+        target_date = st.date_input("분석할 일자 선택", datetime.today())
         
     if st.button("변환 실행", type="primary"):
         if raw_file:
@@ -380,25 +380,25 @@ if analysis_mode == "스케줄 데이터 변환":
 
 # [MODE 2] 단일 스케줄 분석
 elif analysis_mode == "단일 스케줄 분석":
-    st.sidebar.header("⚙️ 분석 설정")
+    st.sidebar.header("분석 설정")
     
     df = None
     use_converted = False
     
     if 'converted_data' in st.session_state:
-        st.sidebar.success(f"💡 변환된 데이터 감지됨 ({len(st.session_state['converted_data'])}건)")
+        st.sidebar.success(f"변환된 데이터 감지됨 ({len(st.session_state['converted_data'])}건)")
         if st.sidebar.checkbox("변환된 데이터 사용하기", value=True):
             df = st.session_state['converted_data']
             use_converted = True
             
     if not use_converted:
-        uploaded_file = st.sidebar.file_uploader("📂 분석용 데이터 (CSV)", type="csv")
+        uploaded_file = st.sidebar.file_uploader("분석용 데이터 (CSV)", type="csv")
         if uploaded_file:
             df = load_data(uploaded_file)
 
     if df is not None:
         if not use_converted:
-            st.sidebar.success(f"✅ 파일 로드: {len(df)}건")
+            st.sidebar.success(f"파일 로드: {len(df)}건")
             
         all_routes = sorted(df['ROUTE'].unique().tolist())
         all_ops = sorted(df['OPS'].unique().tolist())
@@ -418,7 +418,7 @@ elif analysis_mode == "단일 스케줄 분석":
         
         score_weights, time_thresholds, _ = render_score_settings("single", min_mct, max_ct)
         
-        if st.button("🚀 분석 시작", type="primary"):
+        if st.button("분석 시작", type="primary"):
             if not routes_a or not routes_b:
                 st.error("그룹 노선을 선택해주세요.")
             else:
@@ -435,7 +435,7 @@ elif analysis_mode == "단일 스케줄 분석":
             source_df = st.session_state.get('source_df', df)
             g_name_a, g_name_b = st.session_state.get('group_names', ("A", "B"))
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 결과 요약", "📋 상세 리스트", "✈️ 공항별 심층 분석", "🕒 허브 스케줄", "🧱 Bank 시각화"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["결과 요약", "상세 리스트", "공항별 심층 분석", "허브 스케줄", "Bank 시각화"])
             
             with tab1:
                 st.info(f"분석 기준: [{g_name_a}] ↔ [{g_name_b}]")
@@ -455,7 +455,7 @@ elif analysis_mode == "단일 스케줄 분석":
                 if result_df.empty:
                      st.warning("데이터가 없습니다.")
                 else:
-                    st.markdown("### 🏙️ 공항 기준 연결성 분석")
+                    st.markdown("### 공항 기준 연결성 분석")
                     src_a = result_df[result_df['Direction'] == 'Group A -> Group B']['From'].unique()
                     dst_a = result_df[result_df['Direction'] == 'Group B -> Group A']['To'].unique()
                     candidates = set(src_a) | set(dst_a)
@@ -490,7 +490,7 @@ elif analysis_mode == "단일 스케줄 분석":
                             else: st.info("데이터 없음")
 
             with tab4: # 허브 스케줄
-                st.markdown("### 🕒 ICN 허브 스케줄 모니터링")
+                st.markdown("### ICN 허브 스케줄 모니터링")
                 st.caption("도착/출발 항공편을 1시간 단위로 분류하여 노선별 색상 코드로 시각화합니다.")
                 arr_raw = source_df[source_df['구분'] == 'To ICN'].copy()
                 dep_raw = source_df[source_df['구분'] == 'From ICN'].copy()
@@ -513,7 +513,7 @@ elif analysis_mode == "단일 스케줄 분석":
                     st.dataframe(styled_dep, use_container_width=True, height=800, hide_index=True)
 
             with tab5: # Interactive Bank
-                st.markdown("### 🧱 Connection Bank (Interactive)")
+                st.markdown("### Connection Bank (Interactive)")
                 st.caption("왼쪽(Inbound)을 클릭하면 연결 가능한 오른쪽(Outbound) 편이 강조됩니다.")
 
                 if 'selected_inbound_flt' not in st.session_state:
