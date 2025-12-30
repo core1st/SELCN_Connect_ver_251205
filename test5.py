@@ -352,7 +352,7 @@ def preprocess_export_data(file, target_date):
 # [MODE 1] 스케줄 데이터 변환기
 if analysis_mode == "스케줄 데이터 변환":
     st.header("Raw 스케줄 데이터 변환")
-    st.info("BASE의 WEEKLY SKD 메뉴를 통해 추출한 export.csv 파일을 업로드하고 분석할 날짜를 선택하면 분석가능한 형식으로 변환합니다 ")
+    st.info("BASE의 WEEKLY SKD 메뉴를 통해 추출한 export.csv 파일을 업로드하고 분석할 날짜를 선택하면 분석가능한 형식으로 변환합니다")
     
     col1, col2 = st.columns(2)
     with col1:
