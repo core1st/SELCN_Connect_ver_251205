@@ -489,28 +489,100 @@ elif analysis_mode == "단일 스케줄 분석":
                                 st.altair_chart(chart, use_container_width=True)
                             else: st.info("데이터 없음")
 
-            with tab4: # 허브 스케줄
+            with tab4: # 허브 스케줄 [수정됨]
                 st.markdown("### ICN 허브 스케줄 모니터링")
-                st.caption("도착/출발 항공편을 1시간 단위로 분류하여 노선별 색상 코드로 시각화합니다.")
+                st.caption("행을 선택하면 해당 행의 공항(ORGN/DEST)과 동일한 모든 공항이 강조됩니다. (선택 해제 시 강조 해제)")
+
+                # [1] 데이터 준비
                 arr_raw = source_df[source_df['구분'] == 'To ICN'].copy()
                 dep_raw = source_df[source_df['구분'] == 'From ICN'].copy()
+
+                # 시간대 및 정렬 키 생성
                 arr_raw['시간대'] = arr_raw['STA'].apply(get_time_slot)
                 dep_raw['시간대'] = dep_raw['STD'].apply(get_time_slot)
                 arr_raw['Sort_Key'] = arr_raw['STA'].apply(time_to_minutes)
                 dep_raw['Sort_Key'] = dep_raw['STD'].apply(time_to_minutes)
-                arr_raw = arr_raw.sort_values(by='Sort_Key', ascending=True)
-                dep_raw = dep_raw.sort_values(by='Sort_Key', ascending=True)
+
+                # 정렬 및 인덱스 초기화 (on_select 인덱스 매칭을 위해 필수)
+                arr_raw = arr_raw.sort_values(by='Sort_Key', ascending=True).reset_index(drop=True)
+                dep_raw = dep_raw.sort_values(by='Sort_Key', ascending=True).reset_index(drop=True)
+
+                # 출력할 컬럼 정의
                 cols_arr = ['시간대', 'STA', 'ROUTE', 'ORGN', 'OPS', 'FLT NO']
                 cols_dep = ['시간대', 'STD', 'ROUTE', 'DEST', 'OPS', 'FLT NO']
+
+                # [2] 하이라이트 스타일 함수 정의
+                def highlight_target_apo(val, target):
+                    """선택된 APO와 같으면 노란색 배경 강조"""
+                    if target and val == target:
+                        return 'background-color: #ffff00; color: #d63384; font-weight: bold; border: 2px solid red;'
+                    return ''
+
+                # [3] Session State에서 현재 선택된 APO 가져오기 (없으면 None)
+                target_orgn = st.session_state.get('selected_orgn_val', None)
+                target_dest = st.session_state.get('selected_dest_val', None)
+
+                # [4] 스타일 적용 (기존 Route 컬러 + APO 강조)
+                # 4-1. Arrival 스타일
                 styled_arr = arr_raw[cols_arr].style.map(color_route_style, subset=['ROUTE'])
+                if target_orgn:
+                    styled_arr = styled_arr.map(lambda x: highlight_target_apo(x, target_orgn), subset=['ORGN'])
+                
+                # 4-2. Departure 스타일
                 styled_dep = dep_raw[cols_dep].style.map(color_route_style, subset=['ROUTE'])
+                if target_dest:
+                    styled_dep = styled_dep.map(lambda x: highlight_target_apo(x, target_dest), subset=['DEST'])
+
+                # [5] 화면 렌더링 및 이벤트 처리
                 col_arr, col_dep = st.columns(2)
+
+                # --- 왼쪽: 도착 (Arrival) ---
                 with col_arr:
                     st.subheader("🛬 ICN 도착 (Arrival)")
-                    st.dataframe(styled_arr, use_container_width=True, height=800, hide_index=True)
+                    # on_select="rerun"을 사용하여 클릭 시 즉시 재실행
+                    event_arr = st.dataframe(
+                        styled_arr, 
+                        use_container_width=True, 
+                        height=800, 
+                        hide_index=True,
+                        on_select="rerun",           # 선택 시 리런
+                        selection_mode="single-row", # 단일 행 선택
+                        key="grid_arr"
+                    )
+                    
+                    # 클릭 이벤트 처리 로직
+                    new_orgn = None
+                    if len(event_arr.selection.rows) > 0:
+                        idx = event_arr.selection.rows[0]
+                        new_orgn = arr_raw.iloc[idx]['ORGN'] # 선택된 행의 ORGN 추출
+                    
+                    # 선택 값이 변경되었으면 상태 업데이트 후 리런 (무한 루프 방지)
+                    if new_orgn != st.session_state.get('selected_orgn_val'):
+                        st.session_state['selected_orgn_val'] = new_orgn
+                        st.rerun()
+
+                # --- 오른쪽: 출발 (Departure) ---
                 with col_dep:
                     st.subheader("🛫 ICN 출발 (Departure)")
-                    st.dataframe(styled_dep, use_container_width=True, height=800, hide_index=True)
+                    event_dep = st.dataframe(
+                        styled_dep, 
+                        use_container_width=True, 
+                        height=800, 
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="single-row",
+                        key="grid_dep"
+                    )
+
+                    # 클릭 이벤트 처리 로직
+                    new_dest = None
+                    if len(event_dep.selection.rows) > 0:
+                        idx = event_dep.selection.rows[0]
+                        new_dest = dep_raw.iloc[idx]['DEST'] # 선택된 행의 DEST 추출
+                    
+                    if new_dest != st.session_state.get('selected_dest_val'):
+                        st.session_state['selected_dest_val'] = new_dest
+                        st.rerun()
 
             with tab5: # Interactive Bank
                 st.markdown("### Connection Bank (Interactive)")
